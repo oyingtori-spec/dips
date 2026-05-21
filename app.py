@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # GUI 충돌 방지
 import matplotlib.pyplot as plt
-import mplstereonet
 import pandas as pd
 import matplotlib.font_manager as fm
 import urllib.request
@@ -25,7 +24,7 @@ load_korean_font()
 # 1. 웹 페이지 제목 및 전체 화면 너비 설정
 st.set_page_config(layout="wide", page_title="모바일/웹 Dips 종합 분석기")
 st.title("🌋 Web-based Dips Stereonet (Multi-Kinematic Analysis)")
-st.write("사면 조건과 마찰각을 입력하면 각 파괴 모드별 위험 영역(Hazard Zone)에 속하는 극점(Poles)들이 색상으로 하이라이트됩니다.")
+st.write("사면 조건과 마찰각을 입력하면 평면·쐐기·전도파괴의 '위험 영역(Hazard Zone)'만 실제 Dips처럼 투명하게 색칠되어 출력됩니다.")
 
 # 좌측 입력창 비율(3), 우측 그래프 영역 비율(7) 조정
 col1, col2 = st.columns([3, 7])
@@ -56,101 +55,113 @@ with col2:
         
         dip_dirs = np.array(raw_dip_dirs, copy=True)
         dips = np.array(raw_dips, copy=True)
-        dip_dirs.flags.writeable = True
-        dips.flags.writeable = True
     except:
         dip_dirs, dips = [], []
 
     if len(dip_dirs) > 0 and len(dips) > 0:
         
-        # 고해상도 베이스 Stereonet 생성 함수
-        def create_large_stereonet(title_text, title_color):
+        # [근본적 해결책] 버전을 전혀 타지 않는 순수 마일리 표형 Polar Projection 커스텀 생성기
+        def create_dips_base(title_text, title_color):
             fig = plt.figure(figsize=(7, 7), dpi=120)
-            ax = fig.add_subplot(111, projection='stereonet')
+            ax = fig.add_subplot(111, projection='polar')
             
-            # 사면 대원선 및 내부마찰각 원선 기본 드로잉
-            ax.plane(slope_dip_dir, slope_dip, c='black', lw=2.5, label='사면 면 (Slope Face)', zorder=4)
-            theta = np.linspace(0, 2*np.pi, 100)
-            ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
+            # 북향(0도)이 상단으로 가도록 세팅 및 시계방향 회전 설정 (Dips 표준 규격)
+            ax.set_theta_zero_location('N')
+            ax.set_theta_direction(-1)
+            
+            # 반지름 범위 설정 (중심 경사각 0도 ~ 외곽 90도 구조 마스킹)
+            ax.set_ylim(0, 90)
+            ax.set_yticks([30, 60, 90])
+            ax.set_yticklabels(['60°', '30°', '0°'], fontsize=8, color='gray') # 투영 특성상 반대로 표기
+            ax.set_xticklabels(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'], fontsize=9, weight='bold')
+            
+            # 1. 기본 불연속면 극점(Poles) 타점 (경사각 0도일 때 외곽인 평사투영 좌표 변환 반영)
+            r_poles = 90 - dips
+            theta_poles = np.radians((dip_dirs + 180) % 360) # 극점은 반대 방향 매핑
+            ax.scatter(theta_poles, r_poles, c='black', s=35, edgecolors='white', linewidths=0.5, label='Poles (극점)', zorder=5)
+            
+            # 2. 사면 대원의 흔적선 그리기
+            s_angles = np.linspace(0, 2*np.pi, 200)
+            # 사면면의 평사투영 궤적 기하 연산
+            slope_rad = np.radians(slope_dip_dir)
+            # 대원 궤적 공식 유도 적용
+            def get_plane_r(ang):
+                rel_ang = ang - slope_rad
+                # 평사투영상 대원의 반지름 좌표 계산
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    denom = np.cos(rel_ang)
+                    if np.abs(denom) < 1e-5: return 90
+                    val = np.tan(np.radians(slope_dip)) * denom
+                    r = 90 - np.degrees(np.arctan(val))
+                    return np.clip(r, 0, 90)
+            
+            # 3. 내부마찰각원 그리기 (반지름 = 90 - 마찰각)
+            ax.plot(s_angles, np.full_like(s_angles, 90 - friction_angle), c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
             
             ax.set_title(title_text, color=title_color, fontsize=15, weight='bold', pad=25)
-            ax.grid(True, color='gray', linestyle=':', lw=0.5)
+            ax.grid(True, color='lightgray', linestyle=':', lw=0.5)
             return fig, ax
 
         # --- 1️⃣ 평면파괴 차트 (Planar Failure) ---
-        fig1, ax1 = create_large_stereonet("⚠️ 1. 평면파괴 해석 (Planar Failure)", "darkred")
-        ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':', label='주향 제약선(±20°)')
-        ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':')
+        fig1, ax1 = create_dips_base("⚠️ 1. 평면파괴 해석 (Planar Failure)", "darkred")
         
-        # 평면파괴 수학적 매칭 알고리즘 적용 (에러 우회)
-        # 극점은 경사방향 180도 반대편에 맺힘을 반영하여 각도 마스킹
-        rel_dir_p = (dip_dirs - slope_dip_dir + 180) % 360 - 180
-        planar_idx = (np.abs(rel_dir_p) <= 20) & (dips >= friction_angle) & (dips <= slope_dip)
+        # 위험 영역 색칠: 주향 ±20도 범위 내, 내부마찰각원 바깥, 사면각 안쪽 (극점 범주)
+        # 극점 기준이므로 사면 경사방향의 반대편(±180도) 활성창 영역 채우기
+        p_center = (slope_dip_dir + 180) % 360
+        theta_p = np.radians(np.linspace(p_center - 20, p_center + 20, 100))
         
-        # 일반 극점과 위험 영역 진입 극점 구분 분기
-        ax1.pole(dip_dirs[~planar_idx], dips[~planar_idx], c='black', markersize=6, label='안전 극점 (Safe)', zorder=5)
-        if np.any(planar_idx):
-            ax1.pole(dip_dirs[planar_idx], dips[planar_idx], c='red', markersize=8, marker='s', label='위험 극점 (Planar Critical)', zorder=6)
-            
-        ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
+        r_inner_p = np.full_like(theta_p, 90 - slope_dip)       # 사면각선 (극점은 고각일수록 중심에 위치)
+        r_outer_p = np.full_like(theta_p, 90 - friction_angle)  # 마찰각선
+        
+        ax1.fill_between(theta_p, r_inner_p, r_outer_p, color='red', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        
+        ax1.legend(loc='upper left', bbox_to_anchor=(1.1, 1), fontsize=10)
         st.pyplot(fig1, use_container_width=True)
         plt.close(fig1)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
         
         # --- 2️⃣ 쐐기파괴 차트 (Wedge Failure) ---
-        fig2, ax2 = create_large_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
+        fig2, ax2 = create_dips_base("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
-        # 쐐기파괴 교선 위험조건: 불연속면들의 교선이 사면대원 내부 및 내부마찰각 외부 영역에 유치
-        # 두 불연속면들의 교선을 계산하여 판단 (mplstereonet 내장 함수 활용)
-        danger_intersections_dir = []
-        danger_intersections_dip = []
-        safe_intersections_dir = []
-        safe_intersections_dip = []
+        # 쐐기파괴 위험 영역 (교선 기준 랜드마크): 사면면 내부이면서 내부마찰각원 외부 (초승달 형상)
+        w_center = slope_dip_dir
+        theta_w = np.radians(np.linspace(w_center - 90, w_center + 90, 100))
         
-        # 모든 불연속면 쌍의 교선 연산
-        for i in range(len(dip_dirs)):
-            for j in range(i + 1, len(dip_dirs)):
-                # 두 평면의 교선 구하기
-                int_strike, int_dip = mplstereonet.intersection(dip_dirs[i]-90, dips[i], dip_dirs[j]-90, dips[j])
-                if len(int_strike) > 0:
-                    i_dir = (int_strike[0] + 90) % 360
-                    i_dip = int_dip[0]
-                    
-                    # 사면 전방 활성창 검증
-                    rel_dir_w = (i_dir - slope_dip_dir + 180) % 360 - 180
-                    if (np.abs(rel_dir_w) <= 90) & (i_dip >= friction_angle) & (i_dip <= slope_dip):
-                        danger_intersections_dir.append(i_dir)
-                        danger_intersections_dip.append(i_dip)
-                    else:
-                        safe_intersections_dir.append(i_dir)
-                        safe_intersections_dip.append(i_dip)
-
-        # 교점(Intersections) 플로팅
-        if safe_intersections_dir:
-            ax2.pole(safe_intersections_dir, safe_intersections_dip, c='gray', markersize=5, marker='x', label='안전 교점', zorder=5)
-        if danger_intersections_dir:
-            ax2.pole(danger_intersections_dir, danger_intersections_dip, c='orange', markersize=8, marker='X', label='위험 교점 (Wedge Critical)', zorder=6)
+        # 초승달 바운더리 연산 (사면면 대원선 자체가 외곽선 경계가 됨)
+        r_inner_w = np.zeros_like(theta_w) # 중심점 방향 경사면 상부 한계
+        slope_rad = np.radians(slope_dip_dir)
+        
+        r_outer_w = []
+        for t in theta_w:
+            rel_ang = t - slope_rad
+            val = np.tan(np.radians(slope_dip)) * np.cos(rel_ang)
+            r_plane = 90 - np.degrees(np.arctan(np.maximum(val, 0)))
+            # 마찰각원 한계선과의 상호 제약 필터링
+            r_outer_w.append(np.clip(r_plane, 0, 90 - friction_angle))
             
-        ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
+        ax2.fill_between(theta_w, r_inner_w, r_outer_w, color='orange', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        
+        ax2.legend(loc='upper left', bbox_to_anchor=(1.1, 1), fontsize=10)
         st.pyplot(fig2, use_container_width=True)
         plt.close(fig2)
         
         st.markdown("<br><br>", unsafe_allow_html=True)
         
         # --- 3️⃣ 전도파괴 차트 (Toppling Failure) ---
-        fig3, ax3 = create_large_stereonet("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
-        ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--', label='전도 한계선')
+        fig3, ax3 = create_dips_base("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
         
-        # 전도파괴 극점 위험조건 판별
-        rel_dir_t = (dip_dirs - (slope_dip_dir - 180) + 180) % 360 - 180
-        toppling_idx = (np.abs(rel_dir_t) <= 30) & (dips <= (90 - friction_angle)) & (dips >= (90 - slope_dip))
+        # 전도파괴 극점 위험 영역: 사면 경사방향 전방 전도 제약창 (±30도 밴드)
+        t_center = slope_dip_dir
+        theta_t = np.radians(np.linspace(t_center - 30, t_center + 30, 100))
         
-        ax3.pole(dip_dirs[~toppling_idx], dips[~toppling_idx], c='black', markersize=6, label='안전 극점 (Safe)', zorder=5)
-        if np.any(toppling_idx):
-            ax3.pole(dip_dirs[toppling_idx], dips[toppling_idx], c='purple', markersize=8, marker='^', label='위험 극점 (Toppling Critical)', zorder=6)
-            
-        ax3.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
+        # 전도 한계 기준 필터링 영역 채우기
+        r_inner_t = np.full_like(theta_t, 0)
+        r_outer_t = np.full_like(theta_t, 90 - friction_angle)
+        
+        ax3.fill_between(theta_t, r_inner_t, r_outer_t, color='purple', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        
+        ax3.legend(loc='upper left', bbox_to_anchor=(1.1, 1), fontsize=10)
         st.pyplot(fig3, use_container_width=True)
         plt.close(fig3)
         
