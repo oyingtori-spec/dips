@@ -84,35 +84,47 @@ with col2:
             ax.grid(True, color='gray', linestyle=':', lw=0.5)
             return fig, ax
 
+        # 각도 라디안 변환 공통 변수
+        alpha_rad = np.radians(slope_dip_dir)
+
         # --- 1️⃣ 평면파괴 차트 (Planar Failure) ---
         fig1, ax1 = create_large_stereonet("⚠️ 1. 평면파괴 해석 (Planar Failure)", "darkred")
         
-        # 평면파괴 기하학 제약조건 라인 생성
+        # 가이드라인 (±20도 주향 제한선)
         ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':')
         ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':')
         
-        # Dips와 동일하게 평면파괴 위험 구역(Hazard Zone) 채우기
-        # 조건: 주향 ±20도 이내, 사면 경사각 이하, 마찰각 이상 영역
-        p_dip = np.linspace(friction_angle, slope_dip, 20)
-        p_dir = np.linspace(slope_dip_dir - 20, slope_dip_dir + 20, 30)
-        PD, DD = np.meshgrid(p_dip, p_dir)
-        ax1.fill_between_bands(DD.flatten(), PD.flatten(), color='red', alpha=0.15, label='위험 영역 (Hazard Zone)')
+        # [해결책] 버전 문제없는 ax.fill 방식으로 평면파괴 부채꼴 영역 채우기
+        angles = np.radians(np.linspace(slope_dip_dir - 20, slope_dip_dir + 20, 50))
+        # 안쪽 호 (내부마찰각)에서 바깥쪽 호 (사면 경사각)로 이어지는 좌표 생성
+        x_inner = (90 - friction_angle) * np.sin(angles)
+        y_inner = (90 - friction_angle) * np.cos(angles)
+        x_outer = (90 - slope_dip) * np.sin(angles[::-1])
+        y_outer = (90 - slope_dip) * np.cos(angles[::-1])
+        
+        x_h = np.concatenate([x_inner, x_outer])
+        y_h = np.concatenate([y_inner, y_outer])
+        ax1.fill(x_h, y_h, color='red', alpha=0.15, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig1, use_container_width=True)
         plt.close(fig1)
         
-        # [에러 수정] unsafe_allow_html=True 로 변경하여 간격 확보
         st.markdown("<br><br>", unsafe_allow_html=True)
         
         # --- 2️⃣ 쐐기파괴 차트 (Wedge Failure) ---
         fig2, ax2 = create_large_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
-        # 쐐기파괴 위험 구역 채우기 (사면 대원 내부 및 내부마찰각 외부 영역 전체가 교선 위험대)
-        w_dip = np.linspace(friction_angle, slope_dip, 20)
-        w_dir = np.linspace(slope_dip_dir - 90, slope_dip_dir + 90, 40)
-        WD, WD_dir = np.meshgrid(w_dip, w_dir)
-        ax2.fill_between_bands(WD_dir.flatten(), WD.flatten(), color='orange', alpha=0.15, label='위험 영역 (Hazard Zone)')
+        # 쐐기파괴 위험 구역 채우기 (초승달 모양)
+        angles_w = np.radians(np.linspace(slope_dip_dir - 90, slope_dip_dir + 90, 100))
+        x_w_inner = (90 - friction_angle) * np.sin(angles_w)
+        y_w_inner = (90 - friction_angle) * np.cos(angles_w)
+        x_w_outer = (90 - slope_dip) * np.sin(angles_w[::-1])
+        y_w_outer = (90 - slope_dip) * np.cos(angles_w[::-1])
+        
+        x_w = np.concatenate([x_w_inner, x_w_outer])
+        y_w = np.concatenate([y_w_inner, y_w_outer])
+        ax2.fill(x_w, y_w, color='orange', alpha=0.15, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig2, use_container_width=True)
@@ -123,14 +135,19 @@ with col2:
         # --- 3️⃣ 전도파괴 차트 (Toppling Failure) ---
         fig3, ax3 = create_large_stereonet("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
         
-        # 전도파괴 제약 경계 대원선 표기
+        # 전도파괴 제약 경계 대원선
         ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--')
         
-        # 전도파괴 극점 위험 영역 오버레이 (사면 배면 방향 마찰각 제약 영역)
-        t_dip = np.linspace(0, 90 - friction_angle, 20)
-        t_dir = np.linspace(slope_dip_dir - 180 - 20, slope_dip_dir - 180 + 20, 30)
-        TD, TD_dir = np.meshgrid(t_dip, t_dir)
-        ax3.fill_between_bands(TD_dir.flatten(), TD.flatten(), color='purple', alpha=0.15, label='위험 영역 (Hazard Zone)')
+        # 전도파괴 극점 위험 영역 채우기 (사면 반대방향 부채꼴 구간)
+        angles_t = np.radians(np.linspace(slope_dip_dir - 180 - 30, slope_dip_dir - 180 + 30, 50))
+        x_t_inner = 0 * angles_t  # 원점 중심에서부터 출발
+        y_t_inner = 0 * angles_t
+        x_t_outer = (90 - friction_angle) * np.sin(angles_t[::-1])
+        y_t_outer = (90 - friction_angle) * np.cos(angles_t[::-1])
+        
+        x_t = np.concatenate([x_t_inner, x_t_outer])
+        y_t = np.concatenate([y_t_inner, y_t_outer])
+        ax3.fill(x_t, y_t, color='purple', alpha=0.15, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax3.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig3, use_container_width=True)
