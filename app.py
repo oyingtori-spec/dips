@@ -30,8 +30,9 @@ with col2:
     st.subheader("📊 Dips Contour Plot 결과")
     
     # 입력된 데이터 추출
-    dip_dirs = edited_df.iloc[:, 0].dropna().values
-    dips = edited_df.iloc[:, 1].dropna().values
+    # 수정 후 코드 (이걸로 바꾸어 붙여넣으세요)
+dip_dirs = pd.to_numeric(edited_df.iloc[:, 0]).dropna().to_numpy()
+dips = pd.to_numeric(edited_df.iloc[:, 1]).dropna().to_numpy()
     
     if len(dip_dirs) > 0 and len(dips) > 0:
         # matplotlib 플롯 생성 시 폰트 깨짐 방지 및 크기 설정
