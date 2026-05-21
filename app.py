@@ -88,4 +88,22 @@ with col2:
                 ax.plane(slope_dip_dir, 90 - slope_dip, c='purple', lw=1, linestyle='--')
 
             # 격자망 및 스타일링
-            ax.grid
+            ax.grid(True, color='lightgray', linestyle=':')
+            ax.legend(loc='upper right', fontsize=8)
+            
+            # 차트 출력
+            st.pyplot(fig, width=450)
+            
+            # 이미지 다운로드 버튼 제공
+            plt.savefig("dips_kinematic_output.png", bbox_inches='tight', dpi=300)
+            with open("dips_kinematic_output.png", "rb") as file:
+                st.download_button(
+                    label="💾 분석 차트 이미지 다운로드",
+                    data=file,
+                    file_name="dips_kinematic.png",
+                    mime="image/png"
+                )
+        except Exception as e:
+            st.error(f"계산 오류: {e}")
+    else:
+        st.warning("데이터를 1개 이상 입력해 주세요.")
