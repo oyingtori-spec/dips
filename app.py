@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.font_manager as fm
 import urllib.request
 
-# [핵심 추가] 인터넷에서 나눔고딕 폰트를 다운로드하여 한글 깨짐을 완전히 방지합니다.
+# 인터넷에서 나눔고딕 폰트를 다운로드하여 한글 깨짐을 완전히 방지합니다.
 @st.cache_data
 def load_korean_font():
     try:
@@ -78,60 +78,27 @@ with col2:
             # 2. 극점(Pole Plot) 타점
             ax.pole(dip_dirs, dips, c='black', markersize=5, label='Poles', zorder=5)
             
-            # 3. 기준 사면(Slope Face) 대원 및 마찰각 원 그리기
+            # 3. 기준 사면(Slope Face) 대원 그리기
             ax.plane(slope_dip_dir, slope_dip, c='black', lw=2, label='사면 면 (Slope Face)')
             
-            # 내부 마찰각 원 (Cone 구조 표현)
+            # 내부 마찰각 원 (지름선 기준 원형 표현)
             theta = np.linspace(0, 2*np.pi, 100)
             ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=1.5, label='내부마찰각')
 
-            # 4. 선택한 파괴 모드별 가이드라인 및 위험 영역(Hazard Zone) 채우기
+            # 4. 파괴 모드별 가이드라인 오버레이 및 타이틀 여백 조정 (pad=20 추가)
             if analysis_mode == "평면파괴 (Planar Failure)":
-                ax.set_title("⚠️ 평면파괴 분석 모드 (Planar Failure)", color='darkred', fontsize=14, weight='bold')
-                
-                # 평면파괴 위험 범위 비주얼 가이드 채우기 (사면 대원 내부이면서 마찰각 외곽 영역, 주향 +-20도 제약)
-                plot_dips = np.linspace(friction_angle, slope_dip, 30)
-                plot_dirs = np.linspace(slope_dip_dir - 20, slope_dip_dir + 20, 30)
-                PD, DD = np.meshgrid(plot_dips, plot_dirs)
-                ax.fill_between_contour(DD.flatten(), PD.flatten(), color='red', alpha=0.2, label='위험 영역 (Hazard Zone)')
+                ax.set_title("⚠️ 평면파괴 분석 모드 (Planar Failure)", color='darkred', fontsize=14, weight='bold', pad=25)
+                # 평면파괴의 주향 제약조건 가이드선 표시 (+-20도 범위 선)
+                ax.plane(slope_dip_dir - 20, slope_dip, c='orange', lw=1.2, linestyle=':')
+                ax.plane(slope_dip_dir + 20, slope_dip, c='orange', lw=1.2, linestyle=':')
                 
             elif analysis_mode == "쐐기파괴 (Wedge Failure)":
-                ax.set_title("⚠️ 쐐기파괴 분석 모드 (Wedge Failure)", color='darkorange', fontsize=14, weight='bold')
-                
-                # 쐐기파괴는 교선 분석이므로 사면 대원 내부와 마찰각 외곽이 만나는 초승달 모양이 위험 영역이 됩니다.
-                plot_dips = np.linspace(friction_angle, slope_dip, 40)
-                plot_dirs = np.linspace(slope_dip_dir - 90, slope_dip_dir + 90, 60)
-                PD, DD = np.meshgrid(plot_dips, plot_dirs)
-                ax.fill_between_contour(DD.flatten(), PD.flatten(), color='orange', alpha=0.2, label='위험 영역 (Hazard Zone)')
+                ax.set_title("⚠️ 쐐기파괴 분석 모드 (Wedge Failure)", color='darkorange', fontsize=14, weight='bold', pad=25)
+                # 쐐기파괴 가이드라인 표기
+                ax.plane(slope_dip_dir, slope_dip, c='darkorange', lw=1, linestyle='--')
                 
             elif analysis_mode == "전도파괴 (Toppling Failure)":
-                ax.set_title("⚠️ 전도파괴 분석 모드 (Toppling Failure)", color='darkblue', fontsize=14, weight='bold')
-                
-                # 전도파괴 법선 벡터 기준 위험 영역 채우기
-                plot_dips = np.linspace(0, 90 - friction_angle, 30)
-                plot_dirs = np.linspace(slope_dip_dir - 180 - 10, slope_dip_dir - 180 + 10, 30)
-                PD, DD = np.meshgrid(plot_dips, plot_dirs)
-                ax.fill_between_contour(DD.flatten(), PD.flatten(), color='purple', alpha=0.2, label='위험 영역 (Hazard Zone)')
-            else:
-                ax.set_title("📊 기본 분석 모드 (All Plots)", fontsize=14, weight='bold')
-
-            # 격자망 및 스타일링
-            ax.grid(True, color='lightgray', linestyle=':')
-            ax.legend(loc='upper right', fontsize=8)
-            
-            # 차트 출력
-            st.pyplot(fig, width=450)
-            
-            # 이미지 다운로드 버튼 제공
-            plt.savefig("dips_kinematic_output.png", bbox_inches='tight', dpi=300)
-            with open("dips_kinematic_output.png", "rb") as file:
-                st.download_button(
-                    label="💾 분석 차트 이미지 다운로드",
-                    data=file,
-                    file_name="dips_kinematic.png",
-                    mime="image/png"
-                )
-        except Exception as e:
-            st.error(f"계산 오류: {e}")
-    else:
-        st.warning("데이터를 1개 이상 입력해 주세요.")
+                ax.set_title("⚠️ 전도파괴 분석 모드 (Toppling Failure)", color='darkblue', fontsize=14, weight='bold', pad=25)
+                # 전도파괴 위험 영역 경계선 (사면 경사각과 주향 고려 제약선)
+                ax.plane(slope_dip_dir, 90 - slope_dip, c='purple', lw=1.2, linestyle='--')
+                # 전도파괴 진단 효율을 높
