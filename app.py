@@ -68,13 +68,12 @@ with col2:
             fig = plt.figure(figsize=(7, 7), dpi=120)
             ax = fig.add_subplot(111, projection='stereonet')
             
-            # [개선 포인트 1] 알록달록한 등고선 싹 제거 -> Dips 기본 격자망과 극점만 명료하게 표출
+            # 알록달록한 등고선은 완전히 제거하고 깔끔한 흰 격자에 극점만 타점
             ax.pole(dip_dirs, dips, c='black', markersize=6, label='Poles (극점)', zorder=5)
             
-            # 사면 대원선 및 마찰각 원선 그리기
+            # 사면 대원선 및 내부마찰각 원선
             ax.plane(slope_dip_dir, slope_dip, c='black', lw=2.5, label='사면 면 (Slope Face)', zorder=4)
             
-            # 마찰각 Cone 표현
             theta = np.linspace(0, 2*np.pi, 100)
             ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
             
@@ -89,16 +88,13 @@ with col2:
         ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         
-        # [개선 포인트 2] 정밀 메시 그리드를 이용한 위험영역 내부만 칠하기 (버전/좌표 왜곡 없음)
-        _dips, _dirs = np.meshgrid(np.linspace(0, 90, 90), np.linspace(0, 360, 360))
-        
-        # 평면파괴 극점 위험조건: 사면 경사방향 ±20도 이내 고각 거동, 경사각 이하, 내부마찰각 이상
-        rel_dir = (_dirs - slope_dip_dir + 180) % 360 - 180  # 극점은 주향 반대편에 맺힘 고려
-        planar_mask = (np.abs(rel_dir) <= 20) & (_dips >= friction_angle) & (_dips <= slope_dip)
-        
-        # 해당 영역만 투명 피처로 매핑
-        if np.any(planar_mask):
-            ax1.fill_between_bands(_dirs[planar_mask], _dips[planar_mask], color='red', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        # 주향 반대편 극점 구역 계산을 위해 변환 후 호(Arc) 영역 채우기
+        # 평면파괴 극점 위험 영역: 주향 제약 범위 내, 내부마찰각원 바깥쪽, 사면경사원 안쪽
+        sub_strike = (slope_dip_dir - 90) % 360
+        # mplstereonet의 fill_between을 사용하여 두 대원 및 마찰각 사이 채우기
+        # 안정적인 영역 지정을 위해 고경사각 한계선을 활용해 안전 구역 마스킹
+        ax1.fill_between([sub_strike - 20, sub_strike + 20], [friction_angle, friction_angle], [slope_dip, slope_dip], 
+                         mode='poles', color='red', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig1, use_container_width=True)
@@ -109,13 +105,11 @@ with col2:
         # --- 2️⃣ 쐐기파괴 차트 (Wedge Failure) ---
         fig2, ax2 = create_large_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
-        # 쐐기파괴 교선 위험조건: 사면 대원 내부이면서 내부마찰각 원 외부 영역
-        # 극점 기준이 아닌 '교선(Intersection)' 기준 영역 시각화 (사면 경사방향 전방 범주)
-        rel_dir_w = (_dirs - slope_dip_dir + 180) % 360 - 180
-        wedge_mask = (np.abs(rel_dir_w) <= 90) & (_dips >= friction_angle) & (_dips <= slope_dip)
-        
-        if np.any(wedge_mask):
-            ax2.fill_between_bands(_dirs[wedge_mask], _dips[wedge_mask], color='orange', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        # 쐐기파괴 위험 영역 (교선 기준): 사면대원 내부이면서 내부마찰각원 외부 (초승달 모양)
+        # 사면 주향 각도 범주 내에서 사면면과 내부마찰각원 사이 영역을 채움
+        sub_strike_w = (slope_dip_dir - 90) % 360
+        ax2.fill_between([sub_strike_w - 90, sub_strike_w + 90], [friction_angle, friction_angle], [slope_dip, slope_dip], 
+                         mode='intersections', color='orange', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig2, use_container_width=True)
@@ -126,15 +120,13 @@ with col2:
         # --- 3️⃣ 전도파괴 차트 (Toppling Failure) ---
         fig3, ax3 = create_large_stereonet("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
         
-        # 전도파괴 제한 제약 기준선 표기
+        # 전도파괴 제약 경계 대원선 표기
         ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--', zorder=3)
         
-        # 전도파괴 극점 위험조건: 사면 배면 방향 마찰각 제약 영역 오버레이
-        rel_dir_t = (_dirs - (slope_dip_dir - 180) + 180) % 360 - 180
-        toppling_mask = (np.abs(rel_dir_t) <= 30) & (_dips <= (90 - friction_angle)) & (_dips >= (90 - slope_dip))
-        
-        if np.any(toppling_mask):
-            ax3.fill_between_bands(_dirs[toppling_mask], _dips[toppling_mask], color='purple', alpha=0.25, label='위험 영역 (Hazard Zone)', zorder=2)
+        # 전도파괴 극점 위험 영역: 사면 배면 방향 마찰각 제약 영역 오버레이
+        strike_t = (slope_dip_dir + 90) % 360
+        ax3.fill_between([strike_t - 30, strike_t + 30], [90 - slope_dip, 90 - slope_dip], [90 - friction_angle, 90 - friction_angle], 
+                         mode='poles', color='purple', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
         
         ax3.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig3, use_container_width=True)
