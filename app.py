@@ -23,24 +23,22 @@ with col1:
     }
     df = pd.DataFrame(default_data)
     
-    # 엑셀 스타일의 라이브 입력 편집기 제공 (인터넷 창에서 행 추가/삭제 가능)
+    # 엑셀 스타일의 라이브 입력 편집기 제공
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
 with col2:
     st.subheader("📊 Dips Contour Plot 결과")
     
-    # 입력된 데이터 추출
-    # 수정 후 코드 (이걸로 바꾸어 붙여넣으세요)
-dip_dirs = pd.to_numeric(edited_df.iloc[:, 0]).dropna().to_numpy()
-dips = pd.to_numeric(edited_df.iloc[:, 1]).dropna().to_numpy()
+    # 입력된 데이터 추출 및 숫자 변환
+    dip_dirs = pd.to_numeric(edited_df.iloc[:, 0]).dropna().to_numpy()
+    dips = pd.to_numeric(edited_df.iloc[:, 1]).dropna().to_numpy()
     
     if len(dip_dirs) > 0 and len(dips) > 0:
-        # matplotlib 플롯 생성 시 폰트 깨짐 방지 및 크기 설정
         fig = plt.figure(figsize=(6, 6))
         ax = fig.add_subplot(111, projection='stereonet')
         
         try:
-            # 1. Dips 스타일 알록달록한 밀도 등고선 채우기 (Jet 테마)
+            # 1. Dips 스타일 알록달록한 밀도 등고선 채우기
             ax.density_contourf(dip_dirs, dips, cmap='jet', alpha=0.8)
             ax.density_contour(dip_dirs, dips, colors='black', linewidths=0.5)
             
