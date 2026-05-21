@@ -31,12 +31,11 @@ with col1:
 with col2:
     st.subheader("📊 Dips Contour Plot 결과")
     
-    # 입력된 데이터 추출 및 복사본 생성 (.copy()로 read-only 에러 원천 차단)
+    # 입력된 데이터 추출 및 복사본 생성
     try:
         raw_dip_dirs = pd.to_numeric(edited_df.iloc[:, 0]).dropna().to_numpy()
         raw_dips = pd.to_numeric(edited_df.iloc[:, 1]).dropna().to_numpy()
         
-        # 수정 핵심: 데이터 배열을 쓰기 가능한 상태로 강제 복사 및 플래그 변경
         dip_dirs = np.array(raw_dip_dirs, copy=True)
         dips = np.array(raw_dips, copy=True)
         dip_dirs.flags.writeable = True
@@ -45,7 +44,8 @@ with col2:
         dip_dirs, dips = [], []
 
     if len(dip_dirs) > 0 and len(dips) > 0:
-        fig = plt.figure(figsize=(6, 6))
+        # 차트 크기 자체를 약간 작게 조절 (6x6 -> 5x5)
+        fig = plt.figure(figsize=(5, 5))
         ax = fig.add_subplot(111, projection='stereonet')
         
         try:
@@ -59,8 +59,8 @@ with col2:
             # 3. 격자망 및 스타일링
             ax.grid(True, color='lightgray', linestyle=':')
             
-            # 인터넷 창에 그래프 출력
-            st.pyplot(fig)
+            # [수정 핵심] use_container_width=True를 빼고, width(가로 폭)를 400픽셀로 딱 고정합니다.
+            st.pyplot(fig, width=400)
             
             # 이미지 다운로드 버튼 제공
             plt.savefig("dips_output.png", bbox_inches='tight', dpi=300)
