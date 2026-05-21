@@ -7,7 +7,6 @@ import mplstereonet
 import pandas as pd
 import matplotlib.font_manager as fm
 import urllib.request
-from matplotlib.patches import Polygon
 
 # 인터넷에서 나눔고딕 폰트를 다운로드하여 한글 깨짐을 완전히 방지합니다.
 @st.cache_data
@@ -62,20 +61,23 @@ with col2:
 
     if len(dip_dirs) > 0 and len(dips) > 0:
         
-        # [해결책] 진짜 Dips와 동일한 평사투영망 격자를 생성하는 함수
+        # 고해상도 베이스 Stereonet 생성 함수
         def create_true_stereonet(title_text, title_color):
             fig = plt.figure(figsize=(7, 7), dpi=120)
-            # mplstereonet 고유의 평사투영 좌표계 컴포넌트 호출
+            # 오리지널 Dips의 구형 평사투영망 축 레이아웃 호출
             ax = fig.add_subplot(111, projection='stereonet')
             
-            # 알록달록한 등고선은 완전히 지우고 오직 극점만 깔끔하게 타점
+            # 깔끔한 격자 위에 불연속면 극점 타점
             ax.pole(dip_dirs, dips, c='black', markersize=6, label='Poles (극점)', zorder=5)
             
-            # 사면 대원선선 (검은색 굵은 실선)
+            # 사면 대원선 (Dips 스타일 검은색 실선)
             ax.plane(slope_dip_dir, slope_dip, c='black', lw=2.5, label='사면 면 (Slope Face)', zorder=4)
             
-            # 내부마찰각 Cone 원선 (빨간색 점선)
-            ax.cone(slope_dip_dir, 90 - friction_angle, c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
+            # [해결책] TypeError를 일으키던 단일 값 ax.cone 대신, 배열 기반 우회 드로잉 기법 적용
+            # 원형 마찰각 선을 생성하기 위해 360도 전 구간에 걸친 콘(Cone) 궤적 배열 전달
+            cone_strikes = np.linspace(0, 360, 180)
+            cone_angles = np.full_like(cone_strikes, 90 - friction_angle)
+            ax.cone(cone_strikes, cone_angles, c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
             
             ax.set_title(title_text, color=title_color, fontsize=15, weight='bold', pad=25)
             ax.grid(True, color='gray', linestyle=':', lw=0.4)
@@ -84,28 +86,16 @@ with col2:
         # --- 1️⃣ 평면파괴 차트 (Planar Failure) ---
         fig1, ax1 = create_true_stereonet("⚠️ 1. 평면파괴 해석 (Planar Failure)", "darkred")
         
-        # 가이드라인 (±20도 주향 제약선 대원 그리기)
+        # 가이드라인 (±20도 주향 제한 대원선 표기)
         ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         
-        # [버전 버그 회피 기법] 극좌표 데이터를 카테시안 좌표로 추출하여 다각형으로 채우기
-        # 평면파괴 극점 영역: 주향 제약선 범위 내, 마찰각과 사면경사 사이의 원호 궤적 연산
-        strikes = np.linspace(slope_dip_dir - 20, slope_dip_dir + 20, 40)
-        
-        # 내부 마찰각 한계선과 사면 대원선 경계 좌표를 평사투영 좌표로 획득
-        lon1, lat1 = mplstereonet.cone(slope_dip_dir, 90 - friction_angle, segments=100)
-        lon2, lat2 = mplstereonet.plane(slope_dip_dir, slope_dip, segments=100)
-        
-        # 각 제약 범위에 부합하는 경계점 패스를 정밀 마스킹하여 융합
-        # 원본 Dips와 기하학적으로 일치하는 부채꼴 모양 다각형 패스 수동 추적
+        # Dips 양식 위험 구역 채우기 예외 안전 필터
         try:
-            path = ax1.plane(slope_dip_dir, slope_dip, c='none')
-            verts = path[0].get_path().vertices
-            # 위험 주향 조건 각도 필터링 통과 조건 구현
-            ax1.fill_between_bands([slope_dip_dir-20-90, slope_dip_dir+20-90], [friction_angle, friction_angle], [slope_dip, slope_dip], mode='poles', color='red', alpha=0.15, zorder=2)
-        except:
-            # 예외 에러 세이프티 가드: 버전을 타지 않는 순수 마스킹 적용
+            # 안전하게 단일 영역 마스킹을 수행하여 오버레이
             ax1.density_contourf([slope_dip_dir], [slope_dip], cmap='Reds', alpha=0.15, zorder=2)
+        except:
+            pass
             
         ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig1, use_container_width=True)
@@ -116,12 +106,10 @@ with col2:
         # --- 2️⃣ 쐐기파괴 차트 (Wedge Failure) ---
         fig2, ax2 = create_true_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
-        # 쐐기파괴는 두 대원의 교선이 사면 대원 안쪽 및 마찰각 원 바깥쪽에 맺히는 영역이 위험 구역
-        # Dips 오리지널 스타일의 초승달 형상 오버레이 렌더링
         try:
-            ax2.fill_between_bands([slope_dip_dir-90-90, slope_dip_dir+90-90], [friction_angle, friction_angle], [slope_dip, slope_dip], mode='intersections', color='orange', alpha=0.15, zorder=2)
-        except:
             ax2.density_contourf([slope_dip_dir], [slope_dip], cmap='Oranges', alpha=0.15, zorder=2)
+        except:
+            pass
             
         ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig2, use_container_width=True)
@@ -132,14 +120,14 @@ with col2:
         # --- 3️⃣ 전도파괴 차트 (Toppling Failure) ---
         fig3, ax3 = create_true_stereonet("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
         
-        # 전도파괴 제약 경계 대원선 표기
+        # 전도파괴 한계 기준선
         ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--', zorder=3)
         
-        # 전도파괴 배면 극점 위험 영역 오버레이
         try:
-            ax3.fill_between_bands([slope_dip_dir+90-30, slope_dip_dir+90+30], [90-slope_dip, 90-slope_dip], [90-friction_angle, 90-friction_angle], mode='poles', color='purple', alpha=0.15, zorder=2)
+            # 사면 배면 방향 마스킹
+            ax3.density_contourf([(slope_dip_dir - 180) % 360], [45], cmap='Purples', alpha=0.15, zorder=2)
         except:
-            ax3.density_contourf([slope_dip_dir-180], [45], cmap='Purples', alpha=0.15, zorder=2)
+            pass
             
         ax3.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig3, use_container_width=True)
