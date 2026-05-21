@@ -68,7 +68,7 @@ with col2:
             fig = plt.figure(figsize=(7, 7), dpi=120)
             ax = fig.add_subplot(111, projection='stereonet')
             
-            # 알록달록한 등고선은 완전히 제거하고 깔끔한 흰 격자에 극점만 타점
+            # 알록달록한 등고선은 완전히 제거하고 깔끔한 격자에 극점만 표출
             ax.pole(dip_dirs, dips, c='black', markersize=6, label='Poles (극점)', zorder=5)
             
             # 사면 대원선 및 내부마찰각 원선
@@ -88,13 +88,18 @@ with col2:
         ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         
-        # 주향 반대편 극점 구역 계산을 위해 변환 후 호(Arc) 영역 채우기
-        # 평면파괴 극점 위험 영역: 주향 제약 범위 내, 내부마찰각원 바깥쪽, 사면경사원 안쪽
-        sub_strike = (slope_dip_dir - 90) % 360
-        # mplstereonet의 fill_between을 사용하여 두 대원 및 마찰각 사이 채우기
-        # 안정적인 영역 지정을 위해 고경사각 한계선을 활용해 안전 구역 마스킹
-        ax1.fill_between([sub_strike - 20, sub_strike + 20], [friction_angle, friction_angle], [slope_dip, slope_dip], 
-                         mode='poles', color='red', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
+        # [안전 구역 우회] 에러를 내던 전용 함수 대신 정밀 다각형 좌표 채우기 방식 적용
+        # 평면파괴 극점 위험 영역 경계 계산
+        p_strikes = np.linspace(slope_dip_dir - 20 - 90, slope_dip_dir + 20 - 90, 30)
+        p_dips_inner = np.full_like(p_strikes, friction_angle)
+        p_dips_outer = np.full_like(p_strikes, slope_dip)
+        
+        # 외곽을 감싸는 다각형 패스 생성
+        lon = np.concatenate([p_strikes, p_strikes[::-1]])
+        lat = np.concatenate([p_dips_inner, p_dips_outer[::-1]])
+        
+        # 스테레오넷 전용 다각형 플로팅 기법 활용
+        ax1.fill(lon, lat, color='red', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2, mode='poles')
         
         ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig1, use_container_width=True)
@@ -105,11 +110,15 @@ with col2:
         # --- 2️⃣ 쐐기파괴 차트 (Wedge Failure) ---
         fig2, ax2 = create_large_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
-        # 쐐기파괴 위험 영역 (교선 기준): 사면대원 내부이면서 내부마찰각원 외부 (초승달 모양)
-        # 사면 주향 각도 범주 내에서 사면면과 내부마찰각원 사이 영역을 채움
-        sub_strike_w = (slope_dip_dir - 90) % 360
-        ax2.fill_between([sub_strike_w - 90, sub_strike_w + 90], [friction_angle, friction_angle], [slope_dip, slope_dip], 
-                         mode='intersections', color='orange', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
+        # 쐐기파괴 교선 위험 영역 (초승달 모양 바운더리)
+        w_strikes = np.linspace(slope_dip_dir - 90 - 90, slope_dip_dir + 90 - 90, 50)
+        w_dips_inner = np.full_like(w_strikes, friction_angle)
+        w_dips_outer = np.full_like(w_strikes, slope_dip)
+        
+        lon_w = np.concatenate([w_strikes, w_strikes[::-1]])
+        lat_w = np.concatenate([w_dips_inner, w_dips_outer[::-1]])
+        
+        ax2.fill(lon_w, lat_w, color='orange', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2, mode='intersections')
         
         ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig2, use_container_width=True)
@@ -123,10 +132,15 @@ with col2:
         # 전도파괴 제약 경계 대원선 표기
         ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--', zorder=3)
         
-        # 전도파괴 극점 위험 영역: 사면 배면 방향 마찰각 제약 영역 오버레이
-        strike_t = (slope_dip_dir + 90) % 360
-        ax3.fill_between([strike_t - 30, strike_t + 30], [90 - slope_dip, 90 - slope_dip], [90 - friction_angle, 90 - friction_angle], 
-                         mode='poles', color='purple', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2)
+        # 전도파괴 극점 위험 영역 바운더리 좌표 계산 (사면 배면 방향 마찰각 제약 영역)
+        t_strikes = np.linspace(slope_dip_dir + 90 - 30, slope_dip_dir + 90 + 30, 30)
+        t_dips_inner = np.full_like(t_strikes, 90 - slope_dip)
+        t_dips_outer = np.full_like(t_strikes, 90 - friction_angle)
+        
+        lon_t = np.concatenate([t_strikes, t_strikes[::-1]])
+        lat_t = np.concatenate([t_dips_inner, t_dips_outer[::-1]])
+        
+        ax3.fill(lon_t, lat_t, color='purple', alpha=0.2, label='위험 영역 (Hazard Zone)', zorder=2, mode='poles')
         
         ax3.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=10)
         st.pyplot(fig3, use_container_width=True)
