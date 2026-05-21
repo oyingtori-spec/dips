@@ -1,0 +1,4 @@
+mplstereonet
+numpy
+pandas
+matplotlib
