@@ -22,12 +22,12 @@ def load_korean_font():
 
 load_korean_font()
 
-# 1. 웹 페이지 제목 및 레이아웃 설정
-st.set_page_config(layout="wide", page_title="모바일/웹 Dips 분석기")
-st.title("🌋 Web-based Dips Stereonet (Kinematic Analysis)")
-st.write("사면 조건과 마찰각을 숫자로 직접 입력하여 평면·쐐기·전도파괴 위험 영역을 분석하세요.")
+# 1. 웹 페이지 제목 설정
+st.set_page_config(layout="wide", page_title="모바일/웹 Dips 종합 분석기")
+st.title("🌋 Web-based Dips Stereonet (Multi-Kinematic Analysis)")
+st.write("사면 조건과 마찰각을 입력하면 평면·쐐기·전도파괴 해석 결과가 동시에 출력됩니다.")
 
-# 화면을 좌우로 분할
+# 화면을 좌우로 분할 (좌측: 입력창 고정, 우측: 결과 차트들 배열)
 col1, col2 = st.columns([1, 1])
 
 with col1:
@@ -36,13 +36,7 @@ with col1:
     slope_dip = st.number_input("📐 사면 경사각 (Slope Dip) [0 ~ 90]", min_value=0, max_value=90, value=60, step=1)
     friction_angle = st.number_input("🧱 내부마찰각 (Friction Angle) [0 ~ 90]", min_value=0, max_value=90, value=30, step=1)
     
-    st.subheader("🛡️ 2. 해석할 파괴 모드 선택")
-    analysis_mode = st.radio(
-        "오버레이할 파괴 기하학을 선택하세요:",
-        ("없음 (기본 Dips 플롯)", "평면파괴 (Planar Failure)", "쐐기파괴 (Wedge Failure)", "전도파괴 (Toppling Failure)")
-    )
-    
-    st.subheader("📊 3. 불연속면 데이터 입력")
+    st.subheader("📊 2. 불연속면 데이터 입력")
     st.info("💡 아래 표에 현장 측정 데이터를 입력하세요. (엑셀 붙여넣기 가능)")
     
     default_data = {
@@ -53,9 +47,9 @@ with col1:
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
 with col2:
-    st.subheader("📊 Dips 운동학적 해석 결과")
+    st.subheader("📊 Dips 운동학적 종합 해석 결과")
     
-    # 데이터 추출 파트
+    # 데이터 추출
     try:
         raw_dip_dirs = pd.to_numeric(edited_df.iloc[:, 0]).dropna().to_numpy()
         raw_dips = pd.to_numeric(edited_df.iloc[:, 1]).dropna().to_numpy()
@@ -67,52 +61,53 @@ with col2:
     except:
         dip_dirs, dips = [], []
 
-    # 그래프 그리기 파트 (에러가 나지 않도록 구조 간소화)
     if len(dip_dirs) > 0 and len(dips) > 0:
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111, projection='stereonet')
-        
-        # 1. 등고선 및 극점 타점
-        ax.density_contourf(dip_dirs, dips, cmap='jet', alpha=0.6)
-        ax.density_contour(dip_dirs, dips, colors='black', linewidths=0.3)
-        ax.pole(dip_dirs, dips, c='black', markersize=5, label='Poles', zorder=5)
-        
-        # 2. 사면 및 마찰각 기본선 그리기
-        ax.plane(slope_dip_dir, slope_dip, c='black', lw=2, label='사면 면 (Slope Face)')
-        theta = np.linspace(0, 2*np.pi, 100)
-        ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=1.5, label='내부마찰각')
-
-        # 3. 파괴 모드별 가이드라인 레이어 및 제목 패딩 세팅
-        if analysis_mode == "평면파괴 (Planar Failure)":
-            ax.set_title("⚠️ 평면파괴 분석 모드 (Planar Failure)", color='darkred', fontsize=14, weight='bold', pad=25)
-            ax.plane(slope_dip_dir - 20, slope_dip, c='orange', lw=1.2, linestyle=':')
-            ax.plane(slope_dip_dir + 20, slope_dip, c='orange', lw=1.2, linestyle=':')
+        # 공통 차트 생성 함수 정의 (코드 중복 방지)
+        def create_base_stereonet(title_text, title_color):
+            fig = plt.figure(figsize=(5, 5))
+            ax = fig.add_subplot(111, projection='stereonet')
             
-        elif analysis_mode == "쐐기파괴 (Wedge Failure)":
-            ax.set_title("⚠️ 쐐기파괴 분석 모드 (Wedge Failure)", color='darkorange', fontsize=14, weight='bold', pad=25)
-            ax.plane(slope_dip_dir, slope_dip, c='darkorange', lw=1, linestyle='--')
+            # 기본 등고선 및 극점 타점
+            ax.density_contourf(dip_dirs, dips, cmap='jet', alpha=0.5)
+            ax.density_contour(dip_dirs, dips, colors='black', linewidths=0.3)
+            ax.pole(dip_dirs, dips, c='black', markersize=5, label='Poles', zorder=5)
             
-        elif analysis_mode == "전도파괴 (Toppling Failure)":
-            ax.set_title("⚠️ 전도파괴 분석 모드 (Toppling Failure)", color='darkblue', fontsize=14, weight='bold', pad=25)
-            ax.plane(slope_dip_dir, 90 - slope_dip, c='purple', lw=1.2, linestyle='--')
-            ax.plane(slope_dip_dir - 180, 90 - slope_dip, c='purple', lw=1.2, linestyle=':')
-        else:
-            ax.set_title("📊 기본 분석 모드 (All Plots)", fontsize=14, weight='bold', pad=25)
+            # 사면 면 및 마찰각 기본선
+            ax.plane(slope_dip_dir, slope_dip, c='black', lw=2, label='사면 면 (Slope Face)')
+            theta = np.linspace(0, 2*np.pi, 100)
+            ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=1.5, label='내부마찰각')
+            
+            ax.set_title(title_text, color=title_color, fontsize=12, weight='bold', pad=20)
+            ax.grid(True, color='lightgray', linestyle=':')
+            ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=8)
+            return fig, ax
 
-        # 4. 레이아웃 다듬기 및 출력
-        ax.grid(True, color='lightgray', linestyle=':')
-        ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=9)
-        st.pyplot(fig, width=450)
+        # --- 1. 평면파괴 차트 ---
+        st.markdown("### 1️⃣ 평면파괴 해석 (Planar Failure)")
+        fig1, ax1 = create_base_stereonet("⚠️ 평면파괴 가이드라인", "darkred")
+        ax1.plane(slope_dip_dir - 20, slope_dip, c='orange', lw=1.2, linestyle=':')
+        ax1.plane(slope_dip_dir + 20, slope_dip, c='orange', lw=1.2, linestyle=':')
+        st.pyplot(fig1, width=420)
+        plt.close(fig1)
         
-        # 5. 이미지 다운로드 기능
-        plt.savefig("dips_kinematic_output.png", bbox_inches='tight', dpi=300)
-        with open("dips_kinematic_output.png", "rb") as file:
-            st.download_button(
-                label="💾 분석 차트 이미지 다운로드",
-                data=file,
-                file_name="dips_kinematic.png",
-                mime="image/png"
-            )
-        plt.close(fig)
+        st.markdown("---")
+        
+        # --- 2. 쐐기파괴 차트 ---
+        st.markdown("### 2️⃣ 쐐기파괴 해석 (Wedge Failure)")
+        fig2, ax2 = create_base_stereonet("⚠️ 쐐기파괴 가이드라인", "darkorange")
+        ax2.plane(slope_dip_dir, slope_dip, c='darkorange', lw=1, linestyle='--')
+        st.pyplot(fig2, width=420)
+        plt.close(fig2)
+        
+        st.markdown("---")
+        
+        # --- 3. 전도파괴 차트 ---
+        st.markdown("### 3️⃣ 전도파괴 해석 (Toppling Failure)")
+        fig3, ax3 = create_base_stereonet("⚠️ 전도파괴 가이드라인", "darkblue")
+        ax3.plane(slope_dip_dir, 90 - slope_dip, c='purple', lw=1.2, linestyle='--')
+        ax3.plane(slope_dip_dir - 180, 90 - slope_dip, c='purple', lw=1.2, linestyle=':')
+        st.pyplot(fig3, width=420)
+        plt.close(fig3)
+        
     else:
         st.warning("데이터를 1개 이상 입력해 주세요.")
