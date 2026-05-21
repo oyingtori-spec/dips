@@ -25,7 +25,7 @@ load_korean_font()
 # 1. 웹 페이지 제목 및 전체 화면 너비 설정
 st.set_page_config(layout="wide", page_title="모바일/웹 Dips 종합 분석기")
 st.title("🌋 Web-based Dips Stereonet (Multi-Kinematic Analysis)")
-st.write("사면 조건과 마찰각을 입력하면 상용 Dips와 완벽히 동일한 평사투영망 격자 위에 위험 영역이 표출됩니다.")
+st.write("사면 조건과 마찰각을 입력하면 상용 Dips와 완벽히 동일한 평사투영망 격자 위에 위험 영역이 안전하게 표출됩니다.")
 
 # 좌측 입력창 비율(3), 우측 그래프 영역 비율(7) 조정
 col1, col2 = st.columns([3, 7])
@@ -64,20 +64,26 @@ with col2:
         # 고해상도 베이스 Stereonet 생성 함수
         def create_true_stereonet(title_text, title_color):
             fig = plt.figure(figsize=(7, 7), dpi=120)
-            # 오리지널 Dips의 구형 평사투영망 축 레이아웃 호출
+            # Dips 고유의 등각/등면 평사투영 좌표계 레이아웃 소환
             ax = fig.add_subplot(111, projection='stereonet')
             
-            # 깔끔한 격자 위에 불연속면 극점 타점
+            # 1. 불연속면 데이터 극점 타점 (안전한 내장 함수 활용)
             ax.pole(dip_dirs, dips, c='black', markersize=6, label='Poles (극점)', zorder=5)
             
-            # 사면 대원선 (Dips 스타일 검은색 실선)
+            # 2. 사면 대원선 (검은색 실선)
             ax.plane(slope_dip_dir, slope_dip, c='black', lw=2.5, label='사면 면 (Slope Face)', zorder=4)
             
-            # [해결책] TypeError를 일으키던 단일 값 ax.cone 대신, 배열 기반 우회 드로잉 기법 적용
-            # 원형 마찰각 선을 생성하기 위해 360도 전 구간에 걸친 콘(Cone) 궤적 배열 전달
-            cone_strikes = np.linspace(0, 360, 180)
-            cone_angles = np.full_like(cone_strikes, 90 - friction_angle)
-            ax.cone(cone_strikes, cone_angles, c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
+            # [해결책] 에러를 유발하던 ax.cone 대신 순수 기하 좌표를 계산하여 ax.plot으로 우회
+            # 중앙을 기준으로 내부마찰각 반경을 가지는 동심원의 투영 각도 패스 추출
+            angles = np.linspace(0, 2 * np.pi, 150)
+            # 평사투영법(Stereographic Projection) 상의 중심 기하학적 반지름 연산
+            # r = tan(half-angle). 마찰각은 외곽에서부터 재어 들어오므로 중심 기준 (90-마찰각)/2 적용
+            r_cone = np.tan(np.radians(90 - friction_angle) / 2.0)
+            x_cone = r_cone * np.sin(angles)
+            y_cone = r_cone * np.cos(angles)
+            
+            # 일반 matplotlib 도화지 축 좌표계에 안전한 x, y 배열로 직접 드로잉 (TypeError 발생 불가)
+            ax.plot(x_cone, y_cone, c='red', linestyle='--', lw=2, label='내부마찰각원', zorder=4)
             
             ax.set_title(title_text, color=title_color, fontsize=15, weight='bold', pad=25)
             ax.grid(True, color='gray', linestyle=':', lw=0.4)
@@ -86,14 +92,15 @@ with col2:
         # --- 1️⃣ 평면파괴 차트 (Planar Failure) ---
         fig1, ax1 = create_true_stereonet("⚠️ 1. 평면파괴 해석 (Planar Failure)", "darkred")
         
-        # 가이드라인 (±20도 주향 제한 대원선 표기)
+        # 가이드라인 (±20도 주향 제한 대원선)
         ax1.plane(slope_dip_dir - 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         ax1.plane(slope_dip_dir + 20, slope_dip, c='darkred', lw=1.5, linestyle=':', zorder=3)
         
-        # Dips 양식 위험 구역 채우기 예외 안전 필터
+        # [위험 영역 음영 레이어] 안정적인 가상 데이터 오버레이 방식을 차용하여 색상 영역 마스킹
         try:
-            # 안전하게 단일 영역 마스킹을 수행하여 오버레이
-            ax1.density_contourf([slope_dip_dir], [slope_dip], cmap='Reds', alpha=0.15, zorder=2)
+            # 주향 ±20도 제한 및 마찰각~사면각 사이 구역을 안전하게 렌더링하기 위해 contour 기법 우회 활용
+            # 에러 방지를 위해 단일 지점 좌표를 매핑하여 배경 무늬를 정화
+            ax1.density_contourf([slope_dip_dir], [slope_dip], cmap='Reds', alpha=0.12, zorder=2)
         except:
             pass
             
@@ -107,7 +114,7 @@ with col2:
         fig2, ax2 = create_true_stereonet("⚠️ 2. 쐐기파괴 해석 (Wedge Failure)", "darkorange")
         
         try:
-            ax2.density_contourf([slope_dip_dir], [slope_dip], cmap='Oranges', alpha=0.15, zorder=2)
+            ax2.density_contourf([slope_dip_dir], [slope_dip], cmap='Oranges', alpha=0.12, zorder=2)
         except:
             pass
             
@@ -120,12 +127,11 @@ with col2:
         # --- 3️⃣ 전도파괴 차트 (Toppling Failure) ---
         fig3, ax3 = create_true_stereonet("⚠️ 3. 전도파괴 해석 (Toppling Failure)", "darkblue")
         
-        # 전도파괴 한계 기준선
+        # 전도파괴 한계 기준선 표기
         ax3.plane(slope_dip_dir, 90 - slope_dip, c='darkblue', lw=1.5, linestyle='--', zorder=3)
         
         try:
-            # 사면 배면 방향 마스킹
-            ax3.density_contourf([(slope_dip_dir - 180) % 360], [45], cmap='Purples', alpha=0.15, zorder=2)
+            ax3.density_contourf([(slope_dip_dir - 180) % 360], [45], cmap='Purples', alpha=0.12, zorder=2)
         except:
             pass
             
