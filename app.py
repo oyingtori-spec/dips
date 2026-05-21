@@ -9,18 +9,18 @@ import pandas as pd
 # 1. 웹 페이지 제목 및 레이아웃 설정
 st.set_page_config(layout="wide", page_title="모바일/웹 Dips 분석기")
 st.title("🌋 Web-based Dips Stereonet (Kinematic Analysis)")
-st.write("사면 조건과 마찰각을 입력하여 평면·쐐기·전도파괴 위험 영역을 Dips와 동일하게 분석하세요.")
+st.write("사면 조건과 마찰각을 숫자로 직접 입력하여 평면·쐐기·전도파괴 위험 영역을 Dips와 동일하게 분석하세요.")
 
 # 화면을 좌우로 분할 (좌측: 입력 데이터 및 사면 설정, 우측: Dips 결과 차트)
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.subheader("📋 1. 사면 조건 및 마찰각 입력")
+    st.subheader("📋 1. 사면 조건 및 마찰각 입력 (숫자 타이핑)")
     
-    # 사면 경사, 경사방향, 마찰각 입력 컨트롤러
-    slope_dip_dir = st.slider("📐 사면 경사방향 (Slope Dip Direction)", 0, 360, 135, step=1)
-    slope_dip = st.slider("📐 사면 경사각 (Slope Dip)", 0, 90, 60, step=1)
-    friction_angle = st.slider("🧱 내부마찰각 (Friction Angle)", 0, 90, 30, step=1)
+    # [수정 핵심] 슬라이더를 제거하고 숫자를 직접 입력하는 칸으로 변경
+    slope_dip_dir = st.number_input("📐 사면 경사방향 (Slope Dip Direction) [0 ~ 360]", min_value=0, max_value=360, value=135, step=1)
+    slope_dip = st.number_input("📐 사면 경사각 (Slope Dip) [0 ~ 90]", min_value=0, max_value=90, value=60, step=1)
+    friction_angle = st.number_input("🧱 내부마찰각 (Friction Angle) [0 ~ 90]", min_value=0, max_value=90, value=30, step=1)
     
     # 파괴 모드 가이드라인 선택
     st.subheader("🛡️ 2. 해석할 파괴 모드 선택")
@@ -71,47 +71,21 @@ with col2:
             ax.plane(slope_dip_dir, slope_dip, c='black', lw=2, label='Slope Face')
             
             # 내부 마찰각 원 (Cone 구조 표현)
-            # Center of stereonet representation
             theta = np.linspace(0, 2*np.pi, 100)
-            # Equal area representation radius for friction angle
-            r_friction = np.sqrt(2) * np.sin(np.radians(90 - friction_angle) / 2)
             ax.plot(theta, np.full_like(theta, 90 - friction_angle), c='red', linestyle='--', lw=1.5, label='Friction Angle')
 
             # 4. 선택한 파괴 모드별 가이드라인 오버레이
             if analysis_mode == "평면파괴 (Planar Failure)":
-                # 사면 경사면과 마찰각 원 사이 영역 표기 (+-20도 가이드라인)
                 ax.set_title("⚠️ 평면파괴 분석 모드 (Planar Failure Zone)", color='darkred', fontsize=12)
-                # Dips 스타일 평면파괴 활성 영역 가이드 터치
                 ax.plane(slope_dip_dir - 20, slope_dip, c='orange', lw=1, linestyle=':')
                 ax.plane(slope_dip_dir + 20, slope_dip, c='orange', lw=1, linestyle=':')
                 
             elif analysis_mode == "쐐기파괴 (Wedge Failure)":
-                # 두 불연속면의 교선이 사면 경사면과 마찰각 원 사이에 위치하는지 분석
                 ax.set_title("⚠️ 쐐기파괴 분석 모드 (Wedge Failure Zone)", color='darkorange', fontsize=12)
-                # 사면 대원 내부와 마찰각 외곽 영역 교차점 확인용 가이드
                 
             elif analysis_mode == "전도파괴 (Toppling Failure)":
-                # 사면과 반대 방향의 절리군 분석가이드 (주향 연장선 기준 +-10도 법선 제약)
                 ax.set_title("⚠️ 전도파괴 분석 모드 (Toppling Failure Zone)", color='darkblue', fontsize=12)
                 ax.plane(slope_dip_dir, 90 - slope_dip, c='purple', lw=1, linestyle='--')
 
             # 격자망 및 스타일링
-            ax.grid(True, color='lightgray', linestyle=':')
-            ax.legend(loc='upper right', fontsize=8)
-            
-            # 차트 출력 (크기 적정 조절)
-            st.pyplot(fig, width=450)
-            
-            # 이미지 다운로드 버튼 제공
-            plt.savefig("dips_kinematic_output.png", bbox_inches='tight', dpi=300)
-            with open("dips_kinematic_output.png", "rb") as file:
-                st.download_button(
-                    label="💾 분석 차트 이미지 다운로드",
-                    data=file,
-                    file_name="dips_kinematic.png",
-                    mime="image/png"
-                )
-        except Exception as e:
-            st.error(f"계산 오류: {e}")
-    else:
-        st.warning("데이터를 1개 이상 입력해 주세요.")
+            ax.grid
